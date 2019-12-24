@@ -1,0 +1,5 @@
+# pipenv
+.venv/
+
+# notes
+notes.py
