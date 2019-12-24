@@ -1,0 +1,7 @@
+# File types
+*.log*
+*.pkl*
+*.pt*
+*.pth*
+events.**
+*.yml*
