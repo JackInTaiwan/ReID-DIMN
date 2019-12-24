@@ -1,0 +1,90 @@
+checkpoints:
+  save_dir: "./checkpoints/test_1/"
+  load_path: "./checkpoints/test_1/model_DIMNModel.pkl"
+
+model:
+  params:
+    feature_dim: 1792
+    encoder:
+      features:
+        width_mult: 1.4
+    memory_bank:
+      alpha: 1.4
+
+loss:
+  id_loss:
+    weight: 1
+  mat_loss:
+    weight: 1
+  reg_loss:
+    weight: 0.01
+  tri_loss:
+    weight: 1
+    delta: 0.8
+
+cuda:
+  id: 0
+  max_cached_memory: 5  # in GB 
+
+modes:
+  train:
+    epoch: 10000
+    lr: 0.00035
+    gamma: 0.99
+    train_num_workers: 6
+    eval_num_workers: 6
+    train_batch_id_size: 2
+    eval_batch_id_size: 2
+    eval_epoch: 10
+    report_step: 30
+    save_step: 500
+    data_dir: "./data/datasets/"
+    domain_datasets:
+      source:
+        - "cuhk02"
+        - "cuhk03"
+        - "dukemtmcreid"
+        - "market1501"
+      target:
+        - "viper"
+        - "prid"
+        - "grid"
+        - "ilids"
+    timestamp: false
+
+  resume:
+    epoch: 10000
+    lr: 0.00035
+    gamma: 0.99
+    train_num_workers: 6
+    eval_num_workers: 6
+    train_batch_id_size: 8
+    eval_batch_id_size: 8
+    eval_epoch: 20
+    report_step: 30
+    save_step: 500
+    data_dir: "./data/datasets/"
+    domain_datasets:
+      source:
+        - "cuhk02"
+        - "cuhk03"
+        - "dukemtmcreid"
+        - "market1501"
+      target:
+        - "viper"
+        - "prid"
+        - "grid"
+        - "ilids"
+    timestamp: false
+
+  eval:
+    eval_num_workers: 4
+    eval_batch_size: 32
+    data_dir: "./data/datasets/"
+    domain_datasets:
+      target:
+        - "viper"
+        - "prid"
+        - "grid"
+        - "ilids"
+    timestamp: false
