@@ -39,12 +39,11 @@ class TripletLoss(nn.Module):
         mask = torch.zeros((prob.size(0), prob.size(1)), dtype=torch.bool).to(device)
         for i, cls_index in enumerate(cls_list):
             mask[i][cls_index] = 1
-
         prob_pos = prob.masked_select(mask)
-        prob_neg = prob.masked_fill(mask, value=-float("inf"))
-        max_prob_neq, _ = torch.max(prob_neg, dim=1)
+        prob_neg = prob.masked_fill(mask, value=0)
+        max_prob_neg, _ = torch.max(prob_neg, dim=1)
+        loss, _ = torch.max(torch.stack([torch.zeros_like(max_prob_neg).to(device), self.delta + max_prob_neg - prob_pos]), dim=0)
 
-        loss, _ = torch.max(torch.stack([torch.zeros((max_prob_neq.size())).to(device), self.delta + max_prob_neq - prob_pos]), dim=0)
         if self.reduction == "sum":
             loss = loss.sum()
         elif self.reduction == "mean":

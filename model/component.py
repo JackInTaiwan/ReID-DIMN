@@ -60,6 +60,11 @@ class MemoryBank(nn.Module):
         self.alpha = params["alpha"]
         self.memory = nn.Parameter(torch.zeros(cls_size, feature_dim), requires_grad=False)
         self.tmp_memory = None
+
+
+    def clean_memory_bank(self):
+        self.memory.data.zero_()
+        self.tmp_memory = None
     
 
     def update_tmp_memory(self, x, cls_list):

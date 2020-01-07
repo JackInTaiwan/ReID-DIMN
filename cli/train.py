@@ -4,7 +4,10 @@ import warnings
 from argparse import ArgumentParser
 from util.logging import logging_config
 from util.config import TrainerConfig as Config
+# FIXME
 from trainer import Trainer
+# from trainer import TransTrainer as Trainer
+# from trainer import BaseTrainer as Trainer
 
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,7 @@
-from torchreid.data.datamanager import ImageDataManager
 import torch
-torch.manual_seed(0)
+
+from torchreid.data.datamanager import ImageDataManager
+
 
 
 def build_data_loader(data_dir, domain_datasets, mode, num_workers, num_instances=1, batch_id_size=32, batch_size=32):
@@ -10,12 +11,9 @@ def build_data_loader(data_dir, domain_datasets, mode, num_workers, num_instance
             sources=domain_datasets,
             targets=[],
             combineall=True,
+            transforms=["random_flip", "random_crop"],
             train_sampler="RandomIdentitySampler",
             num_instances=num_instances,
-            height=224,
-            width=224,
-            norm_mean=[0.485, 0.456, 0.406],
-            norm_std=[0.229, 0.224, 0.225],
             batch_size_train=batch_id_size * num_instances,
             workers=num_workers,
             use_gpu=False
@@ -47,17 +45,16 @@ def build_data_loader(data_dir, domain_datasets, mode, num_workers, num_instance
                         root=data_dir,
                         sources=domain_datasets,
                         split_id=i,
-                        height=224,
-                        width=224,
-                        norm_mean=[0.485, 0.456, 0.406],
-                        norm_std=[0.229, 0.224, 0.225],
+                        transforms=None,
                         batch_size_test=batch_size,
                         workers=num_workers,
                         use_gpu=False
                     )
                     yield (datamanager.test_loader[domain_datasets]["query"], datamanager.test_loader[domain_datasets]["gallery"])
             
-            return _data_loader_iterator, gallery_cls_size    
+            # FIXME
+            return _data_loader_iterator, gallery_cls_size
+            # return _data_loader_iterator, len(dummy_datamanager.test_loader[domain_datasets]["gallery"])
 
 
 
@@ -66,10 +63,10 @@ if __name__ == "__main__":
 
     datamanager = ImageDataManager(
         root="./data/datasets/",
-        # sources=["cuhk02", "dukemtmcreid", "market1501", "cuhk03"],
-        sources="viper",
+        sources=["cuhk02", "dukemtmcreid", "market1501", "cuhk03"],
+        # sources="prid",
         # targets=["viper"],
-        split_id=2,
+        split_id=9,
         # combineall=True,
         # train_sampler="RandomIdentitySampler",
         # num_instances=2,
@@ -77,15 +74,12 @@ if __name__ == "__main__":
         width=224,
         norm_mean=[0.485, 0.456, 0.406],
         norm_std=[0.229, 0.224, 0.225],
-        batch_size_test=80000,
-        # batch_size_train=8,
+        batch_size_test=10000,
         # workers=4
     )
     train_loader = datamanager.train_loader
     test_loader = datamanager.test_loader
 
-    for item in test_loader["viper"]["gallery"]:
-        print(item[1], item[2], item[3][0])
-        break
-        
+    for item in train_loader:
+        pass
     

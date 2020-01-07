@@ -11,12 +11,12 @@ from tqdm import tqdm
 from torch import nn, optim
 from torchreid.metrics.accuracy import accuracy
 from torchreid.metrics.rank import evaluate_rank
+from torchreid.metrics.distance import compute_distance_matrix
 from torchreid.losses import CrossEntropyLoss
 from tensorboardX import SummaryWriter
 
-from model import DIMNModel
+from model import BaseModel
 from data_loader import build_data_loader
-from .loss import RegularizationLoss, TripletLoss
 
 torch.backends.cudnn.deterministic = True
 torch.manual_seed(0)
@@ -60,7 +60,7 @@ class Trainer:
 
 
     def build_model(self):
-        self.model = DIMNModel(self.pid_num, self.config["model.params"])
+        self.model = BaseModel(self.pid_num, self.config["model.params"])
         self.model.to(self.device)
 
 
@@ -89,27 +89,15 @@ class Trainer:
     def build_optim(self):
         # NOTE: Must init optimizer after the model is moved to expected device to ensure the
         # consistency of the optimizer state dtype
-        lr, gamma = self.mode_config["lr"], self.mode_config["gamma"]
-        self.optim = optim.Adam(self.model.parameters(), lr=lr)
-        # self.lr_scheduler = optim.lr_scheduler.ExponentialLR(
-        #     self.optim,
-        #     gamma=gamma,
-        #     last_epoch=-1
-        # )
-        # lr, gamma, momentum, weight_decay = self.mode_config["lr"], self.mode_config["gamma"], self.mode_config["momentum"], self.mode_config["weight_decay"]
-        # self.optim = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, nesterov=True, weight_decay=weight_decay)
-        milestones = [150, 250]
+        lr, gamma, momentum, weight_decay = self.mode_config["lr"], self.mode_config["gamma"], self.mode_config["momentum"], self.mode_config["weight_decay"]
+        self.optim = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, nesterov=True, weight_decay=weight_decay)
+        milestones = [100,]
         self.lr_scheduler = optim.lr_scheduler.MultiStepLR(self.optim, milestones, gamma=gamma, last_epoch=-1)
 
 
     def build_loss(self):
         params = self.config["loss"]
-        # FIXME
-        # self.id_loss = nn.CrossEntropyLoss(reduction="mean").to(self.device)
         self.id_loss = CrossEntropyLoss(num_classes=self.pid_num, label_smooth=True).to(self.device)
-        self.mat_loss = nn.CrossEntropyLoss(reduction="mean").to(self.device)
-        self.reg_loss = RegularizationLoss(reduction="mean").to(self.device)
-        self.tri_loss = TripletLoss(delta=params["tri_loss.delta"], reduction="mean").to(self.device)
 
     
     def build_summary_writer(self):
@@ -170,19 +158,13 @@ class Trainer:
             for images, cls_, _, fn in pbar:
                 step_time_start = time.time()
 
-                images = images.view(-1, 2, 3, 256, 128)
-                images_probe, images_gallery = images[:, 0].squeeze(1), images[:, 1].squeeze(1)
-                images_probe, images_gallery = images_probe.to(self.device), images_gallery.to(self.device)
-                cls_ = cls_.view(-1, 2)[:, 0].to(self.device)
+                images = images.to(self.device)
                 
-                features_probe, logits_classifier, logits_mapping_network, pred_cls_weights, selected_cls_weights, tmp_memory =\
-                     self.model(images_probe, images_gallery, cls_)
+                cls_ = cls_.to(self.device)
+                
+                features, logits_classifier = self.model(images, cls_)
                 id_loss = self.id_loss(logits_classifier, cls_)
-                mat_loss = self.mat_loss(logits_mapping_network, cls_)
-                reg_loss = self.reg_loss(pred_cls_weights, selected_cls_weights)
-                tri_loss = self.tri_loss(logits_mapping_network, cls_)
-                loss = id_loss * self.config["loss.id_loss.weight"] + mat_loss * self.config["loss.mat_loss.weight"] +\
-                    reg_loss * self.config["loss.reg_loss.weight"] + tri_loss * self.config["loss.tri_loss.weight"]
+                loss = id_loss * self.config["loss.id_loss.weight"]
                 
                 loss.backward()
                 self.optim.step()
@@ -192,10 +174,6 @@ class Trainer:
                 step_time_start = time.time()
                 total_time += step_time
                 total_loss += loss.cpu().detach().item()
-                total_id_loss += id_loss.cpu().detach().item()
-                total_mat_loss += mat_loss.cpu().detach().item()
-                total_reg_loss += reg_loss.cpu().detach().item()
-                total_tri_loss += tri_loss.cpu().detach().item()
 
                 pbar.set_postfix_str("loss: {:.5f}, step time: {:.2f}, g-step: {}".format(loss.cpu().detach().item(), step_time, self.global_step))
                 
@@ -205,27 +183,19 @@ class Trainer:
 
                 if self.global_step % self.report_step == 0:
                     avg_loss = total_loss / total_step
-                    avg_id_loss, avg_mat_loss, avg_reg_loss, avg_tri_loss =\
-                         total_id_loss / total_step, total_mat_loss / total_step, total_reg_loss / total_step, total_tri_loss / total_step
                     logger.info('| Average Step Time: {:.2f} s'.format(total_time / total_step))
                     logger.info('| Average Step Loss: {:.5f}'.format(avg_loss))
-                    logger.info('| Average id/mat/reg/tri Losses: {:.5f}/{:.5f}/{:.5f}/{:.5f}'.\
-                        format(avg_id_loss, avg_mat_loss, avg_reg_loss, avg_tri_loss))
                     
                     self.writer.add_scalars(
                         "loss",
                         {
                             "avg_loss": avg_loss,
-                            "avg_id_loss": avg_id_loss,
-                            "avg_mat_loss": avg_mat_loss,
-                            "avg_reg_loss": avg_reg_loss,
-                            "avg_tri_loss": avg_tri_loss
                         },
                         self.global_step
                     )
                     self.writer.add_scalar("lr", self.optim.param_groups[0]["lr"], self.global_step)
                     self.writer.flush()
-                    total_time, total_step, total_loss, total_id_loss, total_mat_loss, total_reg_loss, total_tri_loss = 0, 0, 0, 0, 0, 0, 0
+                    total_time, total_step, total_loss = 0, 0, 0
                 
                 if self.global_step % self.save_step == 0:
                     self.save_model()
@@ -243,38 +213,42 @@ class Trainer:
         total_cmc_top1, total_cmc_top5, total_cmc_top10, total_ap, total_count = 0, 0, 0, 0, 0
 
         for probe, gallery in self.eval_data_loader():
-            self.model.memory_bank.clean_memory_bank()
-
             cls_list = []
             gallery_cid_list = []
+            gallery_feature_list = []
             with tqdm(gallery) as pbar:
                 for images, cls_, cids, _ in pbar:
                     for c, cid in zip(cls_, cids):
-                        if c.item() not in cls_list:
+                        # if c.item() not in cls_list:
                             cls_list.append(c.item())
                             gallery_cid_list.append(cid.item())
                     new_cls_ = torch.tensor([cls_list.index(c) for c in cls_], dtype=torch.long)
                     images, new_cls_ = images.to(self.device), new_cls_.to(self.device)
-                    self.model.inference_gallery(images, new_cls_)
+                    gallery_feature = self.model.inference(images)
+                    gallery_feature_list.append(gallery_feature)
 
-            pred_logit_list, target_cls_list = [], []
+            gallery_features = torch.cat(gallery_feature_list, dim=0)
+
+            pred_features_list, target_cls_list = [], []
             probe_cid_list = []
             with tqdm(probe) as pbar:
                 for images, cls_, cids, _ in pbar:
                     new_cls_ = torch.tensor([cls_list.index(c.item()) for c in cls_], dtype=torch.long)
                     images, new_cls_ = images.to(self.device), new_cls_.to(self.device)
-                    pred_logits = self.model.inference_probe(images)
+                    probe_features = self.model.inference(images)
+                    # pred_logits = torch.bmm(probe_features.unsqueeze(1), gallery_features.transpose(0, 1).unsqueeze(0).repeat(images.size(0), 1, 1))
                     probe_cid_list += [c.item() for c in cids]
-                    pred_logit_list.append(pred_logits)
+                    pred_features_list.append(probe_features)
                     target_cls_list.append(new_cls_)
 
-            pred_logit = torch.cat(pred_logit_list, dim=0).view(-1, pred_logits.size(1))
-            pred_logit = - nn.functional.softmax(pred_logit, dim=1)    
+            pred_features = torch.cat(pred_features_list, dim=0)
+            dis_matrix = compute_distance_matrix(pred_features.detach().cpu(), gallery_features.detach().cpu())
+            
             target_cls = torch.cat(target_cls_list, dim=0).view(-1)
 
             cmc, ap = evaluate_rank(
-                np.array(pred_logit.detach().cpu()), np.array(target_cls.detach().cpu()), np.array(range(len(cls_list))), np.array(probe_cid_list), np.array(gallery_cid_list),
-                max_rank=10, 
+                np.array(dis_matrix), np.array(target_cls.detach().cpu()), np.array(range(len(cls_list))), np.array(probe_cid_list), np.array(gallery_cid_list),
+                max_rank=10,
                 use_cython=True
             )
             
@@ -364,6 +338,7 @@ class Trainer:
             loaded_model_state_dict = checkpoint["model_state_dict"]
 
             state_dict = self.model.state_dict()
+            # FIXME
             for name, param in loaded_model_state_dict.items():
                 if re.match(r"memory_bank*|classifier*", name) is None:
                     state_dict[name].copy_(param)

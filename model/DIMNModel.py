@@ -57,10 +57,6 @@ class DIMNModel(nn.Module):
 
         """
         features = self.encoder.inference(x)
-        # FIXME: ugly codes
-        with torch.no_grad():
-            logits_classifier = self.classifier(features)
-        
         pred_logits = torch.bmm(self.memory_bank.memory.repeat(x.size(0), 1, 1), features.unsqueeze(2)).squeeze(2) # (B, C, 1)
 
         return pred_logits 

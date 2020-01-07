@@ -1,43 +1,39 @@
 checkpoints:
-  save_dir: "./checkpoints/test_1/"
-  load_path: "./checkpoints/dimn_6/model_DIMNModel.pkl"
+  save_dir: "./checkpoints/trans_2/"
+  load_path: "./checkpoints/trans_2/model_TransModel.pkl"
 
 model:
   params:
-    feature_dim: 1792
+    feature_dim: 1280
     encoder:
       features:
-        width_mult: 1.4
-    memory_bank:
-      alpha: 0.5
+        width_mult: 1
 
 loss:
   id_loss:
     weight: 1
-  mat_loss:
-    weight: 1
-  reg_loss:
-    weight: 0.01
   tri_loss:
     weight: 1
-    delta: 0.8
+    delta: 0.5
 
 cuda:
   id: 0
-  max_cached_memory: 5  # in GB 
 
 modes:
   train:
     epoch: 10000
-    lr: 0.00035
+    lr: 0.0001
     gamma: 0.99
     train_num_workers: 6
     eval_num_workers: 6
-    train_batch_id_size: 2
-    eval_batch_id_size: 2
-    eval_epoch: 10
-    report_step: 30
-    save_step: 500
+    train_batch_id_size: 32
+    eval_batch_id_size: 32
+    switch_step:
+      - 400
+      - 100
+    eval_epoch: 5
+    report_step: 100
+    save_step: 2000
     data_dir: "./data/datasets/"
     domain_datasets:
       source:
@@ -54,15 +50,18 @@ modes:
 
   resume:
     epoch: 10000
-    lr: 0.00035
+    lr: 0.0001
     gamma: 0.99
     train_num_workers: 6
     eval_num_workers: 6
-    train_batch_id_size: 8
-    eval_batch_id_size: 8
-    eval_epoch: 20
-    report_step: 30
-    save_step: 500
+    train_batch_id_size: 32
+    eval_batch_id_size: 32
+    switch_step:
+      - 400
+      - 100
+    eval_epoch: 5
+    report_step: 100
+    save_step: 2000
     data_dir: "./data/datasets/"
     domain_datasets:
       source:
@@ -83,7 +82,7 @@ modes:
     data_dir: "./data/datasets/"
     domain_datasets:
       target:
-        # - "viper"
+        - "viper"
         - "prid"
         - "grid"
         - "ilids"
